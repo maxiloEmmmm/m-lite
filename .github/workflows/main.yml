@@ -1,0 +1,133 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '0 16 * * *'  # UTC 16:00 → 北京时间 00:00
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      latest_commit: ${{ steps.latest.outputs.commit }}
+    steps:
+      - name: Get default branch name
+        id: default
+        run: |
+          DEFAULT_BRANCH=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }} \
+            | jq -r '.default_branch')
+          echo "branch=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Get latest commit on default branch
+        id: latest
+        run: |
+          COMMIT=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ steps.default.outputs.branch }} \
+            | jq -r '.object.sha')
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+
+      - name: Get previous nightly commit (if exists)
+        id: previous
+        continue-on-error: true
+        run: |
+          RELEASE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/tags/nightly)
+          COMMIT=$(echo "$RELEASE" | jq -r '.target_commitish // "null"')
+          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+
+      - name: Decide whether to build
+        id: check
+        run: |
+          if [[ "${{ steps.previous.outputs.commit }}" == "null" ]] || \
+             [[ "${{ steps.previous.outputs.commit }}" != "${{ steps.latest.outputs.commit }}" ]]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Changes detected or no previous nightly → proceed"
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "No changes since last nightly → skip"
+          fi
+
+  build:
+    needs: check-changes
+    continue-on-error: true
+    if: needs.check-changes.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.91.1
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.91.1
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Linux x86_64 (native)
+        if: runner.os == 'Linux'
+        run: |
+          cargo build --release
+          mkdir artifact
+          strip target/release/music163-rs-lite || true
+          chmod +x target/release/music163-rs-lite
+          cp target/release/music163-rs-lite artifact/music163-rs-lite-linux-amd64
+
+      - name: Build macOS x86_64 (cross-compile on arm64 runner)
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add x86_64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          mkdir artifact
+          strip target/x86_64-apple-darwin/release/music163-rs-lite || true
+          chmod +x target/x86_64-apple-darwin/release/music163-rs-lite
+          cp target/x86_64-apple-darwin/release/music163-rs-lite artifact/music163-rs-lite-macos-amd64
+
+      - name: Build Windows x86_64 (native)
+        if: runner.os == 'Windows'
+        run: |
+          cargo build --release
+          mkdir artifact
+          cp target/release/music163-rs-lite.exe artifact/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: music163-rs-lite-x86_64-${{ runner.os }}
+          path: artifact/
+          if-no-files-found: warn
+
+  publish-release:
+    needs: [check-changes, build]
+    if: needs.check-changes.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: ls -R artifacts
+
+      - name: Create/Update nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly Build - ${{ github.sha }}
+          body: |
+            Automated nightly build from commit ${{ github.sha }}.
+          prerelease: true
+          fail_on_unmatched_files: false
+          files: |
+            artifacts/**/*
+          token: ${{ secrets.GITHUB_TOKEN }}
