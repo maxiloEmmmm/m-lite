@@ -117,6 +117,7 @@ impl Modal for Zero {
                         }
                     });
                     self.max = max;
+                    self.current = Footer::get_lyric(self.offset, &self.list).unwrap_or(0);
                 }
                 _ => {}
             },

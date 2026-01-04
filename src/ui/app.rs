@@ -25,7 +25,10 @@ use tui_qrcode::QrCodeWidget;
 use crate::{
     config::Config,
     event::{AppState, ES, HeadMenuKey, LoginState},
-    m163::{self, client::Nc},
+    m163::{
+        self,
+        client::{Nc, TARGET},
+    },
     play::PlayReq,
     ui::{
         content::Content,
@@ -327,12 +330,13 @@ impl App {
                     sid.unwrap().as_str(),
                     SystemTime::now()
                         .duration_since(UNIX_EPOCH)
-                        .expect("时间倒退了！")
-                        .as_millis() as u64
+                        .map(|v| v.as_millis() as u64)
+                        .unwrap_or(1230000000321)
                 );
                 self.login_qr = Some(
                     QrCode::new(format!(
-                        "https://music.163.com/login?codekey={}&chainId={}",
+                        "{}/login?codekey={}&chainId={}",
+                        TARGET,
                         l,
                         self.login_chain.as_str()
                     ))

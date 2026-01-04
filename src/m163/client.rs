@@ -30,7 +30,6 @@ use crate::{config::Config, event::ES, m163::typ, ui::widgets::tip::Msg};
 use serde::Deserialize;
 use serde_json::json;
 
-const dst: &str = "https://music.163.com";
 const aes_key: [u8; 16] = [0x42; 16];
 
 type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
@@ -78,7 +77,7 @@ pub enum NCErr {
     Offline,
 }
 
-const target: &str = "https://music.163.com";
+pub const TARGET: &str = "https://music.163.com";
 
 mod cache {
     pub const COOKIE: &str = "cookie.cache";
@@ -117,7 +116,7 @@ impl Nc {
         let jar = Arc::new(reqwest::cookie::Jar::default());
         let mut csrf = String::default();
         let uu =
-            Url::parse(target).map_err(|err| NCErr::Client("url".to_owned(), err.to_string()))?;
+            Url::parse(TARGET).map_err(|err| NCErr::Client("url".to_owned(), err.to_string()))?;
         cookie.split(";").for_each(|v| {
             if let Some((k, vv)) = v.trim().split_once("=") {
                 if k.eq("__csrf") {
@@ -149,12 +148,12 @@ impl Nc {
         );
         header.insert(
             HOST,
-            HeaderValue::from_static(&target[target.rfind('/').expect("invalid url") + 1..]),
+            HeaderValue::from_static(&TARGET[TARGET.rfind('/').expect("invalid url") + 1..]),
         );
-        header.insert(REFERER, HeaderValue::from_static(target));
+        header.insert(REFERER, HeaderValue::from_static(TARGET));
         header.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"));
         let mut down_header = HeaderMap::new();
-        down_header.insert(REFERER, HeaderValue::from_static(target));
+        down_header.insert(REFERER, HeaderValue::from_static(TARGET));
         down_header.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"));
         let rnp = rsa_no_padding(
             aes_key.as_slice(),
@@ -188,7 +187,7 @@ impl Nc {
     pub async fn qr_wait_login(&self, key: &str, chain: &str) -> Result<typ::QRLogin, NCErr> {
         let req = self
             .client
-            .post(format!("{}/weapi/login/qrcode/client/login", target));
+            .post(format!("{}/weapi/login/qrcode/client/login", TARGET));
         // .header(
         //     HeaderName::from_static("x-login-chain-id"),
         //     HeaderValue::from_str(chain).unwrap(),
@@ -224,7 +223,7 @@ impl Nc {
     pub async fn qr_link(&self) -> Result<typ::QRR, NCErr> {
         let req = self
             .client
-            .post(format!("{}/weapi/login/qrcode/unikey", target));
+            .post(format!("{}/weapi/login/qrcode/unikey", TARGET));
         self._req(
             req,
             json!({
@@ -370,7 +369,7 @@ impl Nc {
 
         let req = self
             .client
-            .post(format!("{}/weapi/discovery/recommend/resource", target));
+            .post(format!("{}/weapi/discovery/recommend/resource", TARGET));
 
         let ret = self
             ._req(req, json!({}))
@@ -395,7 +394,7 @@ impl Nc {
 
         let req = self
             .client
-            .post(format!("{}/weapi/v2/discovery/recommend/songs", target));
+            .post(format!("{}/weapi/v2/discovery/recommend/songs", TARGET));
 
         let ret = self
             ._req(
@@ -415,7 +414,7 @@ impl Nc {
     pub async fn profile(&self) -> Result<typ::Profile, NCErr> {
         let req = self
             .client
-            .post(format!("{}/weapi/w/nuser/account/get", target));
+            .post(format!("{}/weapi/w/nuser/account/get", TARGET));
         self._req(req, json!({})).await
     }
 
@@ -479,7 +478,7 @@ impl Nc {
         self._build().await?;
         let req = self
             .client
-            .post(format!("{}/weapi/cloudsearch/get/web", target));
+            .post(format!("{}/weapi/cloudsearch/get/web", TARGET));
 
         self._req(
             req,
@@ -499,7 +498,7 @@ impl Nc {
             return Ok(ret);
         }
         self._build().await?;
-        let req = self.client.post(format!("{}/weapi/song/lyric", target));
+        let req = self.client.post(format!("{}/weapi/song/lyric", TARGET));
 
         let ret = self
             ._req(
@@ -521,7 +520,7 @@ impl Nc {
         self._build().await?;
         let req = self
             .client
-            .post(format!("{}/weapi/playlist/create", target));
+            .post(format!("{}/weapi/playlist/create", TARGET));
 
         self._req(
             req,
@@ -536,7 +535,7 @@ impl Nc {
         self._build().await?;
         let req = self
             .client
-            .post(format!("{}/weapi/playlist/delete", target));
+            .post(format!("{}/weapi/playlist/delete", TARGET));
 
         self._req(
             req,
@@ -557,7 +556,7 @@ impl Nc {
         self._build().await?;
         let req = self
             .client
-            .post(format!("{}/weapi/playlist/manipulate/tracks", target));
+            .post(format!("{}/weapi/playlist/manipulate/tracks", TARGET));
 
         self._req(
             req,
@@ -577,7 +576,7 @@ impl Nc {
         }
         self._build().await?;
 
-        let req = self.client.post(format!("{}/weapi/user/playlist", target));
+        let req = self.client.post(format!("{}/weapi/user/playlist", TARGET));
 
         let ret = self
             ._req(
@@ -598,7 +597,7 @@ impl Nc {
         self._build().await?;
         let req = self
             .client
-            .post(format!("{}/weapi/playlist/subscribe", target));
+            .post(format!("{}/weapi/playlist/subscribe", TARGET));
 
         self._req(
             req,
@@ -614,7 +613,7 @@ impl Nc {
         self._build().await?;
         let req = self
             .client
-            .post(format!("{}/weapi/playlist/unsubscribe", target));
+            .post(format!("{}/weapi/playlist/unsubscribe", TARGET));
 
         self._req(
             req,
@@ -634,7 +633,7 @@ impl Nc {
 
         let req = self
             .client
-            .post(format!("{}/weapi/v6/playlist/detail", target));
+            .post(format!("{}/weapi/v6/playlist/detail", TARGET));
 
         let ret = self
             ._req(
@@ -658,7 +657,7 @@ impl Nc {
 
         let req = self
             .client
-            .post(format!("{}/weapi/song/enhance/player/url", target));
+            .post(format!("{}/weapi/song/enhance/player/url", TARGET));
 
         self._req(
             req,
@@ -674,7 +673,7 @@ impl Nc {
     pub async fn song(&self, id: usize) -> Result<typ::Song, NCErr> {
         self._build().await?;
 
-        let req = self.client.post(format!("{}/weapi/song/detail", target));
+        let req = self.client.post(format!("{}/weapi/song/detail", TARGET));
 
         self._req(
             req,
