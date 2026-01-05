@@ -127,6 +127,7 @@ impl Modal for Zero {
                         self.close = true;
                     }
                     KeyCode::Char('z') => {
+                        self.close = true;
                         return false;
                     }
                     KeyCode::Char('h') => {

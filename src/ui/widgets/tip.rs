@@ -8,8 +8,9 @@ use std::{
 use color_eyre::owo_colors::colors::css::Plum;
 use ratatui::{
     crossterm::event::{Event, KeyCode},
+    layout::{Constraint, Direction, Layout},
     text::Line,
-    widgets::{Block, Clear, WidgetRef},
+    widgets::{Block, Clear, Widget, WidgetRef},
 };
 
 use crate::{event::ES, ui::app::Modal};
@@ -52,21 +53,26 @@ pub fn Msg(msg: &str, d: Duration) -> Tip {
 impl Modal for Tip {
     fn render_ref(&mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
         let block = Block::bordered().title("tip~");
-        let line = Line::from(self.msg.as_str());
-        let top = ratatui::layout::Rect::new(
-            0,
-            0,
-            if line.width() as u16 + 2 > area.width {
-                area.width
-            } else {
-                line.width() as u16 + 2
-            },
-            3,
-        );
-        let area = block.inner(top);
-        Clear.render_ref(top, buf);
-        block.render_ref(top, buf);
-        line.render_ref(area, buf);
+        let layouts = Layout::new(
+            Direction::Horizontal,
+            vec![
+                Constraint::Percentage(20),
+                Constraint::Fill(1),
+                Constraint::Percentage(20),
+            ],
+        )
+        .split(area);
+
+        let ss = Layout::vertical(vec![
+            Constraint::Fill(1),
+            Constraint::Min(6),
+            Constraint::Fill(1),
+        ])
+        .split(layouts[1]);
+        let mid = block.inner(ss[1]);
+        Clear.render(ss[1], buf);
+        block.render(ss[1], buf);
+        self.msg.render_ref(mid, buf);
     }
 
     fn event(&mut self, e: &mut ES) -> bool {

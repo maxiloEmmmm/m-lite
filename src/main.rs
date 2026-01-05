@@ -3,7 +3,7 @@ use std::{
     time::Instant,
 };
 
-use ratatui::crossterm::event::{Event, KeyCode};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use tokio_util::sync::CancellationToken;
 
 use crate::{event::ES, play::PlayCtx, ui::app::App};
@@ -79,6 +79,9 @@ fn main() {
                 ES::Event(e) => {
                     only_sec = false;
                     if let Event::Key(key) = e {
+                        if !key.kind.eq(&KeyEventKind::Press) {
+                            continue;
+                        }
                         if KeyCode::Char('q') == key.code {
                             break 'top;
                         }

@@ -144,7 +144,6 @@ impl Slide {
                                         ("x".to_owned(), "删除歌单".to_owned()),
                                         ("d".to_owned(), "取消收藏歌单".to_owned()),
                                         ("x".to_owned(), "删除歌单".to_owned()),
-                                        ("n".to_owned(), "创建歌单".to_owned()),
                                         ("c".to_owned(), "清理歌单缓存".to_owned()),
                                         ("j/k".to_owned(), "下/上移动".to_owned()),
                                         ("esc".to_owned(), "返回上一级".to_owned()),

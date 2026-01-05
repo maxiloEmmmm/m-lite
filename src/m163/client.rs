@@ -14,6 +14,7 @@ use aes::cipher::{
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
 use chrono::{Datelike, Local};
+use color_eyre::owo_colors::OwoColorize;
 use num_bigint::{BigInt, BigUint};
 use num_traits::Num;
 use rand::rngs::OsRng;
@@ -26,7 +27,12 @@ use reqwest::{
     },
 };
 
-use crate::{config::Config, event::ES, m163::typ, ui::widgets::tip::Msg};
+use crate::{
+    config::Config,
+    event::ES,
+    m163::{client::cache::COOKIE, typ},
+    ui::widgets::tip::Msg,
+};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -86,7 +92,7 @@ mod cache {
 pub struct Nc {
     client: reqwest::Client,
     down_client: reqwest::Client,
-    csrf: String,
+    // csrf: String,
     aes_1: Aes128CbcEnc,
     aes_2: Aes128CbcEnc,
     aes_key_rsa: String,
@@ -114,16 +120,16 @@ impl Nc {
         let mut client = reqwest::Client::builder();
         client = client.cookie_store(true);
         let jar = Arc::new(reqwest::cookie::Jar::default());
-        let mut csrf = String::default();
+        // let mut csrf = String::default();
         let uu =
             Url::parse(TARGET).map_err(|err| NCErr::Client("url".to_owned(), err.to_string()))?;
         cookie.split(";").for_each(|v| {
-            if let Some((k, vv)) = v.trim().split_once("=") {
-                if k.eq("__csrf") {
-                    println!("find csrf {}", vv);
-                    csrf = vv.to_owned();
-                }
-            }
+            // if let Some((k, vv)) = v.trim().split_once("=") {
+            //     if k.eq("__csrf") {
+            //         println!("find csrf {}", vv);
+            //         csrf = vv.to_owned();
+            //     }
+            // }
 
             jar.add_cookie_str(v, &uu);
         });
@@ -171,7 +177,7 @@ impl Nc {
                 .default_headers(down_header)
                 .build()
                 .map_err(|err| NCErr::Client("down-build".to_owned(), err.to_string()))?,
-            csrf: csrf,
+            // csrf: csrf,
             aes_1: Aes128CbcEnc::new(
                 "0CoJUm6Qyw8W8jud".as_bytes().into(),
                 "0102030405060708".as_bytes().into(),
@@ -216,10 +222,6 @@ impl Nc {
         .map_err(|err| NCErr::Client("req".to_owned(), err.to_string()))
     }
 
-    pub fn is_login(&self) -> bool {
-        !self.csrf.is_empty()
-    }
-
     pub async fn qr_link(&self) -> Result<typ::QRR, NCErr> {
         let req = self
             .client
@@ -233,6 +235,17 @@ impl Nc {
         )
         .await
         .map_err(|err| NCErr::Client("req".to_owned(), err.to_string()))
+    }
+
+    pub async fn logout(&self) {
+        let req = self.client.post(format!("{}/weapi/logout", TARGET));
+        self._req::<typ::Any>(req, json!({}))
+            .await
+            .map_err(|err| NCErr::Client("req".to_owned(), err.to_string()));
+    }
+
+    pub fn clear_cookie(&self) {
+        std::fs::remove_file(self.config.Cache().join(COOKIE));
     }
 
     fn _cache<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>, NCErr> {
@@ -270,17 +283,17 @@ impl Nc {
         mut r: reqwest::RequestBuilder,
         mut data: serde_json::Value,
     ) -> Result<T, NCErr> {
-        if !self.csrf.is_empty() {
-            match &mut data {
-                serde_json::Value::Object(inner) => {
-                    inner.insert(
-                        "csrf_token".to_owned(),
-                        serde_json::Value::String(self.csrf.to_owned()),
-                    );
-                }
-                _ => return Err(NCErr::Client("not object".to_owned(), "".to_owned())),
-            }
-        }
+        // if !self.csrf.is_empty() {
+        //     match &mut data {
+        //         serde_json::Value::Object(inner) => {
+        //             inner.insert(
+        //                 "csrf_token".to_owned(),
+        //                 serde_json::Value::String(self.csrf.to_owned()),
+        //             );
+        //         }
+        //         _ => return Err(NCErr::Client("not object".to_owned(), "".to_owned())),
+        //     }
+        // }
         let mut m1 = serde_json::to_vec(&data).map_err(|_| NCErr::Any)?;
         let mut mll = m1.len();
         m1.resize(pkcs7_padded_len(m1.len(), aes::Aes128::block_size()), 0);
@@ -315,9 +328,9 @@ impl Nc {
             }),
             ("encSecKey", self.aes_key_rsa.as_str()),
         ]));
-        if self.csrf.len() > 0 {
-            r = r.query(&[("csrf_token", self.csrf.as_str())]);
-        }
+        // if self.csrf.len() > 0 {
+        //     r = r.query(&[("csrf_token", self.csrf.as_str())]);
+        // }
 
         let resp = r.send().await.map_err(|err| {
             if err.is_timeout() || err.is_connect() {

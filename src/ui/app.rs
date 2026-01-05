@@ -15,9 +15,12 @@ use qrcode::QrCode;
 use ratatui::{
     Frame,
     buffer::Buffer,
-    crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers},
+    crossterm::{
+        cursor::MoveToRow,
+        event::{Event, KeyCode, KeyEvent, KeyModifiers},
+    },
     layout::{Constraint, Direction, Layout, Rect},
-    widgets::{Block, Clear, Widget, WidgetRef},
+    widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
 };
 use tokio::sync::mpsc::UnboundedSender;
 use tui_qrcode::QrCodeWidget;
@@ -37,7 +40,10 @@ use crate::{
         head::Head,
         search::Search,
         slide::Slide,
-        widgets::tip::{Confirm, Msg},
+        widgets::{
+            help::Help,
+            tip::{Confirm, Msg},
+        },
     },
 };
 
@@ -103,16 +109,21 @@ impl Context {
 
 pub type ShareCtx = Rc<RefCell<Context>>;
 
+pub fn any_help() -> Vec<(String, String)> {
+    vec![("q".to_owned(), "退出".to_owned())]
+}
+
 pub fn global_help(mut base: Vec<(String, String)>) -> Vec<(String, String)> {
     base.append(&mut vec![
         ("space".to_owned(), "开始/暂停".to_owned()),
         ("p".to_owned(), "打开播放列表".to_owned()),
         ("</>".to_owned(), "快退/快进".to_owned()),
         ("-/+".to_owned(), "调整音量".to_owned()),
-        ("q".to_owned(), "退出".to_owned()),
         ("f".to_owned(), "搜索".to_owned()),
         ("z".to_owned(), "纯净模式".to_owned()),
+        ("a".to_owned(), "登出".to_owned()),
     ]);
+    base.append(&mut any_help());
     base
 }
 
@@ -165,11 +176,7 @@ impl App {
         let top = ctx.clone();
         App {
             ctx: ctx.clone(),
-            state: if top.borrow().nc.is_login() {
-                AppState::Authed
-            } else {
-                AppState::Authing
-            },
+            state: AppState::Authed,
             login_key: "".to_owned(),
             login_chain: "".to_owned(),
             login_qr: None,
@@ -180,6 +187,26 @@ impl App {
             footer: Footer::new(ctx.clone(), playListFocus),
             last_offline_test: Instant::now(),
         }
+    }
+
+    fn centered_rect(&self, width: u16, height: u16, area: Rect) -> Rect {
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length((area.height - height) / 2),
+                Constraint::Length(height),
+                Constraint::Length((area.height - height) / 2),
+            ])
+            .split(area);
+
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length((area.width - width) / 2),
+                Constraint::Length(width),
+                Constraint::Length((area.width - width) / 2),
+            ])
+            .split(vertical[1])[1]
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
@@ -198,10 +225,16 @@ impl App {
                 }
                 _ => {}
             }
-            format!("认证, {}...", state,).render(layouts[0], frame.buffer_mut());
+            Paragraph::new(format!("认证, {}...", state,))
+                .centered()
+                .render(layouts[0], frame.buffer_mut());
             if let Some(qr) = self.login_qr.clone() {
                 let widget = QrCodeWidget::new(qr).colors(tui_qrcode::Colors::Inverted);
-                frame.render_widget(widget, layouts[1]);
+                let rect = widget.size(layouts[1]);
+                frame.render_widget(
+                    widget,
+                    self.centered_rect(rect.width, rect.height, layouts[1]),
+                );
             }
         } else {
             let layouts = Layout::default()
@@ -236,6 +269,13 @@ impl App {
         }
     }
 
+    fn clear_login(&mut self) {
+        self.login_qr = None;
+        self.login_chain.clear();
+        self.login_key.clear();
+        self.login_state = LoginState::Wait;
+    }
+
     pub fn event(&mut self, e: &mut ES) {
         {
             let m = self.ctx.borrow().modals.len();
@@ -264,11 +304,56 @@ impl App {
             ES::Event(e) => match e {
                 Event::Key(ee) => match ee.code {
                     KeyCode::Char('f') => {
-                        self.ctx
-                            .borrow_mut()
-                            .add_modal(Search::new(self.ctx.clone()));
+                        if matches!(self.state, AppState::Authed) {
+                            self.ctx
+                                .borrow_mut()
+                                .add_modal(Search::new(self.ctx.clone()));
+                        } else {
+                            return;
+                        }
                     }
-                    _ => {}
+                    KeyCode::Char('h') => match self.state {
+                        AppState::Authing => {
+                            let mut base = vec![];
+                            base.push(("r".to_owned(), "刷新二维码".to_owned()));
+                            base.append(&mut any_help());
+                            self.ctx.borrow_mut().add_modal(Help::new(base));
+                            return;
+                        }
+                        _ => {}
+                    },
+                    KeyCode::Char('r') => {
+                        if matches!(self.state, AppState::Authing) {
+                            self.clear_login();
+                            self.ctx.borrow().tx.send(ES::AppState(AppState::Authing));
+                            return;
+                        }
+                    }
+                    KeyCode::Char('a') => {
+                        if matches!(self.state, AppState::Authed) {
+                            let aux = self.ctx.borrow().async_clone();
+                            self.ctx.borrow_mut().add_modal(Confirm(
+                                "确认退出账号?",
+                                Arc::new(Box::new(move |yes| {
+                                    if yes {
+                                        aux.nc.clear_cookie();
+                                        aux.rt.spawn({
+                                            let aux = aux.clone();
+                                            async move {
+                                                aux.nc.logout().await;
+                                                aux.tx.send(ES::AppState(AppState::Authing));
+                                            }
+                                        });
+                                    }
+                                })),
+                            ));
+                        }
+                    }
+                    _ => {
+                        if matches!(self.state, AppState::Authing) {
+                            return;
+                        }
+                    }
                 },
                 _ => {}
             },
@@ -282,6 +367,7 @@ impl App {
                 self.state = s.clone();
                 match s {
                     AppState::Authed => {
+                        self.clear_login();
                         self.ctx.borrow().rt.spawn({
                             let txx = self.ctx.borrow().tx.clone();
                             let nnx = self.ctx.borrow().nc.clone();
@@ -351,13 +437,7 @@ impl App {
                         .as_secs()
                         > 3
                     {
-                        self.ctx.borrow().tx.send(ES::AppState(
-                            if self.ctx.borrow().nc.is_login() {
-                                AppState::Authed
-                            } else {
-                                AppState::Authing
-                            },
-                        ));
+                        self.ctx.borrow().tx.send(ES::AppState(AppState::Authed));
                     }
                     return;
                 }
