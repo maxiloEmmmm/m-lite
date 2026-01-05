@@ -1,6 +1,6 @@
 # m-lite
 
-又又又又又一个网易云音乐终端客户端
+又又又又又一个网易云音乐终端客户端 [![Built With Ratatui](https://ratatui.rs/built-with-ratatui/badge.svg)](https://ratatui.rs/)
 
 本项目是一个 **非官方的第三方音乐播放客户端**，主要用于个人使用、技术学习与交流目的。
 
