@@ -76,6 +76,7 @@ jobs:
       - name: Build Linux x86_64 (native)
         if: runner.os == 'Linux'
         run: |
+          apt install libasound2-dev -y
           cargo build --release
           mkdir artifact
           strip target/release/music163-rs-lite || true
