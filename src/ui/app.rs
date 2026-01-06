@@ -56,8 +56,13 @@ pub struct Context {
     pub test: i64,
     pub like_set: HashSet<usize>,
     pub like_play_id: usize,
-    pub modals: Vec<Rc<RefCell<Box<dyn Modal>>>>,
+    pub modals: Vec<Rc<RefCell<InnerModal>>>,
     pub offline: bool,
+}
+
+struct InnerModal {
+    render: Box<dyn Modal>,
+    full: bool,
 }
 
 #[derive(Clone)]
@@ -94,7 +99,17 @@ impl Context {
     }
 
     pub fn add_modal<T: Modal + 'static>(&mut self, m: T) {
-        self.modals.push(Rc::new(RefCell::new(Box::new(m))));
+        self.modals.push(Rc::new(RefCell::new(InnerModal {
+            render: Box::new(m),
+            full: false,
+        })));
+    }
+
+    pub fn add_full_modal<T: Modal + 'static>(&mut self, m: T) {
+        self.modals.push(Rc::new(RefCell::new(InnerModal {
+            render: Box::new(m),
+            full: true,
+        })));
     }
 
     pub fn async_clone(&self) -> AsyncUtil {
@@ -210,6 +225,23 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
+        let fullOption = self
+            .ctx
+            .borrow()
+            .modals
+            .iter()
+            .rposition(|v| v.borrow().full);
+        if let Some(index) = fullOption {
+            let len = self.ctx.borrow_mut().modals.len();
+            for m in index..len {
+                let modal = self.ctx.borrow().modals[m].clone();
+                modal
+                    .borrow_mut()
+                    .render
+                    .render_ref(frame.area(), frame.buffer_mut());
+            }
+            return;
+        }
         if matches!(self.state, AppState::Authing) {
             let layouts = Layout::default()
                 .direction(Direction::Vertical)
@@ -264,6 +296,7 @@ impl App {
                 let modal = self.ctx.borrow().modals[m].clone();
                 modal
                     .borrow_mut()
+                    .render
                     .render_ref(frame.area(), frame.buffer_mut());
             }
         }
@@ -283,7 +316,7 @@ impl App {
             for m in (0..m).rev() {
                 // todo iter_mut? can't as_mut ? why
                 let modal = self.ctx.borrow().modals[m].clone();
-                ret = ret || !modal.borrow_mut().event(e);
+                ret = ret || !modal.borrow_mut().render.event(e);
                 if ret {
                     break; // 别立马退出 可能 modal 已经要移除视图了 先检查
                 }
@@ -291,7 +324,7 @@ impl App {
             self.ctx
                 .borrow_mut()
                 .modals
-                .retain_mut(|v| !v.borrow().closed());
+                .retain_mut(|v| !v.borrow().render.closed());
             if !m.eq(&self.ctx.borrow().modals.len()) {
                 self.ctx.borrow().tx.send(ES::Render);
             }
@@ -372,6 +405,7 @@ impl App {
                             let txx = self.ctx.borrow().tx.clone();
                             let nnx = self.ctx.borrow().nc.clone();
                             async move {
+                                nnx.clear_play();
                                 match nnx.profile().await {
                                     Ok(v) => {
                                         txx.send(ES::Event(Event::Key(KeyEvent::new(

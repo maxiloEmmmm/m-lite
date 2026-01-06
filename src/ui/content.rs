@@ -352,7 +352,14 @@ impl Content {
                         .map(|v| v.as_str())
                         .unwrap_or(""),
                 ))
-                .block(Block::bordered().title("信息"))
+                .block(
+                    if self.focus.is_me() {
+                        Block::bordered()
+                    } else {
+                        Block::default()
+                    }
+                    .title("信息"),
+                )
                 .render_ref(layouts[0], buf);
                 StatefulWidgetRef::render_ref(
                     &(List::new(

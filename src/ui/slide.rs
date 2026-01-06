@@ -327,7 +327,7 @@ impl Slide {
     }
 
     pub fn render_ref(&mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
-        let mut b = Block::new().borders(Borders::RIGHT);
+        let mut b = Block::new();
         if self.focus.is_me() {
             b = b.borders(Borders::ALL);
         }

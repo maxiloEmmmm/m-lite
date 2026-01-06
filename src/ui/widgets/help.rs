@@ -65,6 +65,9 @@ impl Modal for Help {
                         KeyCode::Esc => {
                             self.close = true;
                         }
+                        KeyCode::Char('h') => {
+                            self.close = true;
+                        }
                         _ => {}
                     }
 

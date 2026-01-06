@@ -10,7 +10,7 @@ use ratatui::{
     crossterm::event::{Event, KeyCode},
     layout::{Constraint, Direction, Layout},
     text::Line,
-    widgets::{Block, Clear, Widget, WidgetRef},
+    widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
 };
 
 use crate::{event::ES, ui::app::Modal};
@@ -34,12 +34,14 @@ impl Debug for Type {
 pub struct Tip {
     pub msg: String,
     pub typ: Type,
+    simple: bool,
 }
 
 pub fn Confirm(msg: &str, t: Arc<Box<dyn Fn(bool) + Send + Sync>>) -> Tip {
     Tip {
         msg: format!("{} y/n", msg),
         typ: Type::confirm(false, Some(t)),
+        simple: false,
     }
 }
 
@@ -47,6 +49,15 @@ pub fn Msg(msg: &str, d: Duration) -> Tip {
     Tip {
         msg: msg.to_owned(),
         typ: Type::normal(d),
+        simple: false,
+    }
+}
+
+pub fn SimpleMsg(msg: &str, d: Duration) -> Tip {
+    Tip {
+        msg: msg.to_owned(),
+        typ: Type::normal(d),
+        simple: true,
     }
 }
 
@@ -65,14 +76,20 @@ impl Modal for Tip {
 
         let ss = Layout::vertical(vec![
             Constraint::Fill(1),
-            Constraint::Min(6),
+            if self.simple {
+                Constraint::Length(3)
+            } else {
+                Constraint::Percentage(40)
+            },
             Constraint::Fill(1),
         ])
         .split(layouts[1]);
         let mid = block.inner(ss[1]);
         Clear.render(ss[1], buf);
         block.render(ss[1], buf);
-        self.msg.render_ref(mid, buf);
+        Paragraph::new(self.msg.as_str())
+            .wrap(ratatui::widgets::Wrap { trim: true })
+            .render_ref(mid, buf);
     }
 
     fn event(&mut self, e: &mut ES) -> bool {

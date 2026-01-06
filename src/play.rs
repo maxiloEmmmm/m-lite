@@ -16,7 +16,10 @@ use crate::{
     config::Config,
     event::{AppState, ES, LoginState, Play, PlayState},
     m163::client::Nc,
-    ui::{app::Wrap, widgets::tip::Msg},
+    ui::{
+        app::Wrap,
+        widgets::tip::{Msg, SimpleMsg},
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -104,13 +107,14 @@ pub fn play(ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, UnboundedSen
                                         Ok(d) => d,
                                         Err(e) => {
                                             ctx.event_tx.wrap_error("lyric", &e);
+                                            ctx.event_tx.send(ES::Play(Play::State(PlayState::Failed(id))));
                                             continue;
                                         }
                                     };
                                     if !ctx.nc.song_cached(id) {
                                         match ctx.nc.song_url(id).await {
                                             Ok(song) => {
-                                                ctx.event_tx.send(ES::Tip(Msg("start down", Duration::from_secs(5))));
+                                                ctx.event_tx.send(ES::Tip(SimpleMsg("start down", Duration::from_secs(1))));
                                                 match ctx.nc
                                                     .download(
                                                         song.data[0].url.as_str(),
@@ -121,14 +125,16 @@ pub fn play(ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, UnboundedSen
                                                     Ok(r) => r,
                                                     Err(e) => {
                                                         ctx.event_tx.wrap_error("download", &e);
+                                                        ctx.event_tx.send(ES::Play(Play::State(PlayState::Failed(id))));
                                                         continue;
                                                     }
                                                 };
-                                                ctx.event_tx.send(ES::Tip(Msg("down ok", Duration::from_secs(5))));
+                                                ctx.event_tx.send(ES::Tip(SimpleMsg("down ok", Duration::from_secs(1))));
 
                                             }
                                             Err(e) => {
-                                                ctx.event_tx.wrap_error("req.song", &e);
+                                                ctx.event_tx.wrap_error("req.song.url", &e);
+                                                ctx.event_tx.send(ES::Play(Play::State(PlayState::Failed(id))));
                                                 continue;
                                             }
                                         }
@@ -140,7 +146,8 @@ pub fn play(ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, UnboundedSen
                                         {
                                             Ok(file) => file,
                                             Err(e) => {
-                                                println!("open {}", e);
+                                                ctx.event_tx.wrap_error("load.song_file", &e);
+                                                ctx.event_tx.send(ES::Play(Play::State(PlayState::Failed(id))));
                                                 return;
                                             }
                                         };

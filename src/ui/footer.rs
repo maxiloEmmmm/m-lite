@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashSet,
     ops::{Add, Index, Sub},
     time::Duration,
 };
@@ -44,6 +45,7 @@ pub struct Footer {
     plFocus: Focus, // todo 把播放列表迁移到 modal
     volume: f32,
     lyrics: Vec<Lyric>,
+    bad: HashSet<usize>,
 }
 
 impl Footer {
@@ -61,6 +63,7 @@ impl Footer {
             plFocus: play_list_focus,
             volume: 1.0,
             lyrics: vec![],
+            bad: HashSet::new(),
         }
     }
     fn set_play_mode(&mut self, mode: PlayMode) {
@@ -99,10 +102,15 @@ impl Footer {
             }
         }
 
-        self.ctx
-            .borrow()
-            .ptx
-            .send(PlayReq::Play(self.list[index].id));
+        let id = self.list[index].id;
+        if self.bad.contains(&id) {
+            if !matches!(self.play_mode, PlayMode::SingleLoop) || self.list.len() == 1 {
+                return;
+            }
+            self.play_next(false);
+            return;
+        }
+        self.ctx.borrow().ptx.send(PlayReq::Play(id));
     }
 
     fn change_t(&mut self, mut v: isize) {
@@ -129,7 +137,12 @@ impl Footer {
                 Play::State(s) => {
                     self.state = s.clone();
                     match s {
+                        PlayState::Failed(id) => {
+                            self.bad.insert(*id);
+                            self.play_next(false);
+                        }
                         PlayState::Play(id, lyric) => {
+                            self.bad.remove(id);
                             self.lyrics.clear();
                             for line in lyric.split('\n') {
                                 if let Some(index) = line.find('[') {
@@ -167,6 +180,7 @@ impl Footer {
                                     self.current = Some(v.clone());
                                     self.list_state.select(Some(index));
                                     self.list_index = index;
+                                    break;
                                 }
                             }
                             self.offset = Duration::from_secs(0);
@@ -183,6 +197,7 @@ impl Footer {
                 Play::PlayList((list, op)) => {
                     match op {
                         PlayListOP::Set => {
+                            self.bad.clear();
                             self.list = list.clone();
                         }
                         PlayListOP::Append => {
@@ -294,7 +309,9 @@ impl Footer {
                         }
                     }
                     KeyCode::Char('z') => {
-                        self.ctx.borrow_mut().add_modal(Zero::new(self.ctx.clone()));
+                        self.ctx
+                            .borrow_mut()
+                            .add_full_modal(Zero::new(self.ctx.clone()));
                         self.ctx
                             .borrow()
                             .tx

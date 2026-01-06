@@ -111,4 +111,5 @@ pub enum PlayState {
     Start,
     Stop,
     None,
+    Failed(usize),
 }

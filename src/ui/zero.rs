@@ -89,7 +89,15 @@ impl Modal for Zero {
                         style = style.fg(ratatui::style::Color::Green);
                     }
 
-                    let line = Line::styled(v.text.as_str(), style).centered();
+                    let line = Line::styled(
+                        if v.text.is_empty() {
+                            "........"
+                        } else {
+                            v.text.as_str()
+                        },
+                        style,
+                    )
+                    .centered();
 
                     ListItem::new(line)
                 })
