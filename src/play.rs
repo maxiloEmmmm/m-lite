@@ -40,7 +40,7 @@ pub struct PlayCtx {
     pub config: Config,
 }
 
-pub fn play(ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, UnboundedSender<PlayReq>) {
+pub fn play(mut ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, UnboundedSender<PlayReq>) {
     // todo 为什么返回impl Future, 就不行呢
     let (tx, mut rx) = mpsc::unbounded_channel();
     (
@@ -101,6 +101,8 @@ pub fn play(ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, UnboundedSen
                                 }
                                 PlayReq::V(v) => {
                                     sink.set_volume(v);
+                                    ctx.config.volume = v;
+                                    ctx.config.save();
                                 }
                                 PlayReq::Play(id) => {
                                     let lyric = match ctx.nc.lyric(id).await {

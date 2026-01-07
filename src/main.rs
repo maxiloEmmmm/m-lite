@@ -17,8 +17,7 @@ mod ui;
 fn main() {
     color_eyre::install().unwrap();
 
-    let c = config::load();
-    c.init();
+    let mut c = config::load();
     let tc = CancellationToken::new();
     let (event_tx, event_rx) = mpsc::channel::<ES>();
     let nn = Arc::new(m163::client::Nc::new(event_tx.clone(), c.clone()).unwrap());
@@ -27,6 +26,7 @@ fn main() {
     let stream_handle =
         rodio::OutputStreamBuilder::open_default_stream().expect("open audio stream failed");
     let sink = rodio::Sink::connect_new(stream_handle.mixer());
+    sink.set_volume(c.volume);
     let (task, play_tx) = play::play(
         PlayCtx {
             nc: nn.clone(),

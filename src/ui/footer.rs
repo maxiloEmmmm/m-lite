@@ -50,10 +50,10 @@ pub struct Footer {
 
 impl Footer {
     pub fn new(ctx: ShareCtx, play_list_focus: Focus) -> Self {
+        let volume = ctx.borrow().config.volume;
         Footer {
             state: PlayState::None,
             offset: Duration::from_secs(0),
-            ctx: ctx,
             play_mode: PlayMode::Single,
             list_view: false,
             list: vec![],
@@ -61,9 +61,10 @@ impl Footer {
             list_state: ListState::default(),
             list_index: 0,
             plFocus: play_list_focus,
-            volume: 1.0,
+            volume: volume,
             lyrics: vec![],
             bad: HashSet::new(),
+            ctx: ctx,
         }
     }
     fn set_play_mode(&mut self, mode: PlayMode) {

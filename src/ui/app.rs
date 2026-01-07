@@ -26,7 +26,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tui_qrcode::QrCodeWidget;
 
 use crate::{
-    config::Config,
+    config::{Config, load},
     event::{AppState, ES, HeadMenuKey, LoginState},
     m163::{
         self,
@@ -334,6 +334,9 @@ impl App {
             }
         }
         match &e {
+            ES::ReloadConfig => {
+                self.ctx.borrow_mut().config = load();
+            }
             ES::Event(e) => match e {
                 Event::Key(ee) => match ee.code {
                     KeyCode::Char('f') => {

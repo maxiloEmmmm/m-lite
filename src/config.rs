@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use directories::ProjectDirs;
 
-#[derive(serde::Deserialize, Clone, Default)]
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
 pub struct Config {
     #[serde(default)]
     pub cookie: String,
@@ -10,6 +10,12 @@ pub struct Config {
     pub home_dir: String,
     #[serde(default)]
     pub less_usage: bool,
+    #[serde(default = "default_volume")]
+    pub volume: f32,
+}
+
+fn default_volume() -> f32 {
+    1.0
 }
 
 impl Config {
@@ -17,8 +23,17 @@ impl Config {
         PathBuf::from(&self.home_dir).join("cache")
     }
 
-    pub fn init(&self) {
+    pub fn init(&mut self) {
         std::fs::create_dir_all(self.Cache()).expect("touch.cache_dir");
+        if self.volume > 1.0 || self.volume < 0.0 {
+            self.volume = 1.0;
+        }
+    }
+
+    pub fn save(&self) {
+        if let Ok(v) = serde_yaml::to_string(self) {
+            std::fs::write(PathBuf::from(&self.home_dir).join("config.yaml"), v);
+        }
     }
 }
 
@@ -46,5 +61,6 @@ pub fn load() -> Config {
     if newest.home_dir.is_empty() {
         newest.home_dir = ret.home_dir;
     }
+    newest.init();
     newest
 }

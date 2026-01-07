@@ -58,6 +58,7 @@ pub enum ES {
     LoginState(LoginState),
     AppState(AppState),
     Tip(Tip),
+    ReloadConfig,
 }
 
 #[derive(Debug, Clone)]
