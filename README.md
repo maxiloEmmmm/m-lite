@@ -19,6 +19,14 @@
 - 离线模式
 - 每日推荐
 
+### 下载
+
+https://github.com/maxiloEmmmm/m-lite/releases/tag/nightly
+
+### 预览
+
+https://github.com/maxiloEmmmm/m-lite/tree/main/example/snap
+
 ---
 
 ## 数据来源与版权声明
