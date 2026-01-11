@@ -52,19 +52,17 @@ impl Content {
             }
         }
     }
+    fn is_like(&self) -> bool {
+        self.list
+            .as_ref()
+            .map(|v| v.playlist.id.eq(&self.ctx.borrow().like_play_id))
+            .unwrap_or(false)
+    }
     pub fn event(&mut self, e: &mut ES) {
         match e {
             ES::DataPlayListDetail(pl) => {
                 self.list = Some(pl.clone());
-                if self
-                    .list
-                    .as_ref()
-                    .unwrap()
-                    .playlist
-                    .id
-                    .eq(&self.ctx.borrow().like_play_id)
-                    && self.list.as_ref().unwrap().playlist.ordered
-                {
+                if self.is_like() {
                     self.ctx.borrow_mut().like_set.clear();
                     for v in &self.list.as_ref().unwrap().playlist.tracks {
                         self.ctx.borrow_mut().like_set.insert(v.id);
@@ -316,11 +314,12 @@ impl Content {
     }
 
     pub fn render_ref(&mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer) {
+        let is_like = self.is_like();
         let mut b = Block::new().title(
             self.list
                 .as_ref()
-                .map(|v| v.playlist.name.as_str())
-                .unwrap_or(""),
+                .map(|v| self.ctx.borrow().maybe_hidden(v.playlist.name.as_str()))
+                .unwrap_or("".to_owned()),
         );
         if self.focus.is_me() {
             b = b.borders(Borders::ALL);
@@ -339,16 +338,24 @@ impl Content {
 {}
 "#,
                     pl.playlist.tags.join(","),
-                    DateTime::from_timestamp_millis(pl.playlist.create_time as i64)
-                        .map(|v| v.format("%Y-%m-%d").to_string())
-                        .unwrap_or("-".to_owned()),
-                    pl.playlist.creator.nickname.as_str(),
-                    pl.playlist.creator.signature.as_str(),
+                    if pl.playlist.id == 0 {
+                        "-".to_owned()
+                    } else {
+                        DateTime::from_timestamp_millis(pl.playlist.create_time as i64)
+                            .map(|v| v.format("%Y-%m-%d").to_string())
+                            .unwrap_or("-".to_owned())
+                    },
+                    self.ctx
+                        .borrow()
+                        .maybe_hidden(pl.playlist.creator.nickname.as_str()),
+                    self.ctx
+                        .borrow()
+                        .maybe_hidden(pl.playlist.creator.signature.as_str()),
                     pl.playlist
                         .description
                         .as_ref()
-                        .map(|v| v.as_str())
-                        .unwrap_or(""),
+                        .map(|v| self.ctx.borrow().maybe_hidden(v.as_str()))
+                        .unwrap_or("".to_owned()),
                 ))
                 .block(
                     if self.focus.is_me() {
@@ -381,7 +388,10 @@ impl Content {
                                 {
                                     style = style.red();
                                 }
-                                let line = Line::styled(vv, style);
+                                let line = Line::styled(
+                                    self.ctx.borrow().maybe_hidden(vv.as_ref()).to_owned(),
+                                    style,
+                                );
 
                                 ListItem::new(line)
                             })

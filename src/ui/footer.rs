@@ -497,14 +497,25 @@ impl Footer {
                         .iter()
                         .enumerate()
                         .map(|(i, v)| {
-                            let line = Line::styled(format!("{}{}{}{}",
-                                if self.bad.contains(&v.id) { "[BAD] "  } else { ""  },
+                            let vv = format!(
+                                "{}{}{}{}",
+                                if self.bad.contains(&v.id) {
+                                    "[BAD] "
+                                } else {
+                                    ""
+                                },
                                 if self.list_index == i { "*" } else { "" },
                                 v.name.as_str(),
                                 if self.ctx.borrow().like_set.get(&v.id).is_some() {
                                     " 💗"
-                                } else { "" }
-                            ), Style::default());
+                                } else {
+                                    ""
+                                }
+                            );
+                            let line = Line::styled(
+                                self.ctx.borrow().maybe_hidden(vv.as_str()).to_owned(),
+                                Style::default(),
+                            );
 
                             ListItem::new(line)
                         })

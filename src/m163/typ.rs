@@ -93,7 +93,7 @@ pub struct ProfileInner {
     // pub background_img_id: i64,
     // #[serde(rename = "backgroundUrl")]
     // pub background_url: String,
-    pub signature: String,
+    pub signature: Option<String>,
     // #[serde(rename = "createTime")]
     // pub create_time: i64,
     // #[serde(rename = "userName")]

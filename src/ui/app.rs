@@ -1,14 +1,8 @@
 use core::fmt;
 use std::{
-    cell::{RefCell, RefMut},
-    collections::{HashSet, LinkedList},
-    fmt::Display,
-    rc::Rc,
-    sync::{
-        Arc,
-        mpsc::{self, Sender},
-    },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    borrow::Cow, cell::{RefCell, RefMut}, collections::{HashSet, LinkedList}, fmt::Display, rc::Rc, sync::{
+        mpsc::{self, Sender}, Arc
+    }, time::{Duration, Instant, SystemTime, UNIX_EPOCH}
 };
 
 use qrcode::QrCode;
@@ -58,6 +52,7 @@ pub struct Context {
     pub like_play_id: usize,
     pub modals: Vec<Rc<RefCell<InnerModal>>>,
     pub offline: bool,
+    pub private: bool,
 }
 
 struct InnerModal {
@@ -87,6 +82,10 @@ impl Wrap for Sender<ES> {
 }
 
 impl Context {
+    pub fn maybe_hidden(&self, v: &str) -> String {
+        if self.private { "*".repeat(v.len()) } else { v.to_owned() }
+    }
+
     pub fn info(&mut self, msg: &str) {
         self.add_modal(Msg(msg, Duration::from_millis(1500)));
     }
@@ -137,6 +136,7 @@ pub fn global_help(mut base: Vec<(String, String)>) -> Vec<(String, String)> {
         ("f".to_owned(), "搜索".to_owned()),
         ("z".to_owned(), "纯净模式".to_owned()),
         ("a".to_owned(), "登出".to_owned()),
+        ("i".to_owned(), "隐私模式".to_owned()),
     ]);
     base.append(&mut any_help());
     base
@@ -186,6 +186,7 @@ impl App {
             like_play_id: 0,
             modals: vec![],
             offline: false,
+            private: false,
         }));
 
         let top = ctx.clone();
@@ -347,6 +348,10 @@ impl App {
                         } else {
                             return;
                         }
+                    }
+                    KeyCode::Char('i') => {
+                        let private = self.ctx.borrow().private;
+                        self.ctx.borrow_mut().private = !private;
                     }
                     KeyCode::Char('h') => match self.state {
                         AppState::Authing => {

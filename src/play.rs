@@ -80,11 +80,8 @@ pub fn play(mut ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, Unbounde
                                             ctx.event_tx.send(ES::AppState(AppState::Authed));
                                             ctx.event_tx.send(ES::LoginState(LoginState::Ok));
                                         },
-                                        8821 => {
-                                            println!("触发安全认证了 先去 web 登录一下走完流程退出再来! {}", result.message);
-                                        }
                                         other => {
-                                            println!("c {} {} {}", other, key, chain);
+                                            ctx.event_tx.send(ES::Tip(Msg(&format!("watch log unexpected {}", other), Duration::from_secs(2))));
                                         },
                                     }
                                 },

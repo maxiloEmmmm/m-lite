@@ -38,9 +38,14 @@ impl WidgetRef for Head {
         let inner = b.inner(area);
 
         let p = Paragraph::new(format!(
-            "{} - {}{}",
-            self.name.as_str(),
-            self.desc.as_str(),
+            "{} - {}{}{}",
+            self.ctx.borrow().maybe_hidden(self.name.as_str()),
+            self.ctx.borrow().maybe_hidden(self.desc.as_str()),
+            if self.ctx.borrow().private {
+                "[private mode]"
+            } else {
+                ""
+            },
             if self.ctx.borrow().offline {
                 "(offline...)"
             } else {
@@ -147,7 +152,7 @@ impl Head {
             ES::DataProfile(profile) => {
                 self.ctx.borrow_mut().offline = false;
                 self.name = profile.profile.nickname.to_owned();
-                self.desc = profile.profile.signature.to_owned();
+                self.desc = profile.profile.signature.as_ref().map(|v| v.to_owned()).unwrap_or("".to_owned());
             }
             ES::Event(ee) => {
                 if self.focus.is_me() {
