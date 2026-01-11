@@ -238,6 +238,7 @@ impl Nc {
     }
 
     pub async fn logout(&self) {
+        *self._profile.write().await = None;
         let req = self.client.post(format!("{}/weapi/logout", TARGET));
         self._req::<typ::Any>(req, json!({}))
             .await
