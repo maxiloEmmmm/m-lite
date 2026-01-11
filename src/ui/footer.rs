@@ -46,6 +46,7 @@ pub struct Footer {
     volume: f32,
     lyrics: Vec<Lyric>,
     bad: HashSet<usize>,
+    played: HashSet<usize>,
 }
 
 impl Footer {
@@ -65,10 +66,12 @@ impl Footer {
             lyrics: vec![],
             bad: HashSet::new(),
             ctx: ctx,
+            played: HashSet::new(),
         }
     }
     fn set_play_mode(&mut self, mode: PlayMode) {
         self.play_mode = mode;
+        self.played.clear();
         match self.play_mode {
             PlayMode::Random => {
                 fastrand::shuffle(&mut self.list);
@@ -92,8 +95,11 @@ impl Footer {
                     index = 0;
                 } else {
                     index = self.list_state.selected().map(|v| v + 1).unwrap_or(0);
-                    if index == self.list.len() {
-                        if matches!(self.play_mode, PlayMode::Random) {
+                    let random_next_round = self.played.len() + self.bad.len() >= self.list.len()
+                        && matches!(self.play_mode, PlayMode::Random);
+                    if index == self.list.len() || random_next_round {
+                        if random_next_round {
+                            self.played.clear();
                             fastrand::shuffle(&mut self.list);
                         }
 
@@ -144,6 +150,7 @@ impl Footer {
                         }
                         PlayState::Play(id, lyric) => {
                             self.bad.remove(id);
+                            self.played.insert(*id);
                             self.lyrics.clear();
                             for line in lyric.split('\n') {
                                 if let Some(index) = line.find('[') {
@@ -490,15 +497,14 @@ impl Footer {
                         .iter()
                         .enumerate()
                         .map(|(i, v)| {
-                            let mut vv = Cow::Borrowed(v.name.as_str());
-                            if self.list_index == i {
-                                vv = Cow::Owned(format!("*{}", vv));
-                            }
-
-                            if self.ctx.borrow().like_set.get(&v.id).is_some() {
-                                vv = Cow::Owned(format!("{} 💗", vv));
-                            }
-                            let line = Line::styled(vv, Style::default());
+                            let line = Line::styled(format!("{}{}{}{}",
+                                if self.bad.contains(&v.id) { "[BAD] "  } else { ""  },
+                                if self.list_index == i { "*" } else { "" },
+                                v.name.as_str(),
+                                if self.ctx.borrow().like_set.get(&v.id).is_some() {
+                                    " 💗"
+                                } else { "" }
+                            ), Style::default());
 
                             ListItem::new(line)
                         })

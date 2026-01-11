@@ -256,33 +256,31 @@ impl Content {
                             if self.list.is_none() {
                                 return;
                             }
-                            self.ctx.borrow().tx.send(ES::Play(Play::PlayList((
-                                self.list.clone().unwrap().playlist.tracks,
-                                PlayListOP::Set,
-                            ))));
                             self.ctx
                                 .borrow()
                                 .tx
                                 .send(ES::Play(Play::PlayMode(PlayMode::Random)));
-                            let index = fastrand::Rng::new()
-                                .usize(0..self.list.as_ref().unwrap().playlist.tracks.len());
+                            self.ctx.borrow().tx.send(ES::Play(Play::PlayList((
+                                self.list.clone().unwrap().playlist.tracks,
+                                PlayListOP::Set,
+                            ))));
 
                             self.ctx.borrow().ptx.send(PlayReq::Play(
-                                self.list.as_ref().unwrap().playlist.tracks[index].id,
+                                self.list.as_ref().unwrap().playlist.tracks[0].id,
                             ));
                         }
                         KeyCode::Char('o') => {
                             if self.list.is_none() {
                                 return;
                             }
-                            self.ctx.borrow().tx.send(ES::Play(Play::PlayList((
-                                self.list.clone().unwrap().playlist.tracks,
-                                PlayListOP::Set,
-                            ))));
                             self.ctx
                                 .borrow()
                                 .tx
                                 .send(ES::Play(Play::PlayMode(PlayMode::Order)));
+                            self.ctx.borrow().tx.send(ES::Play(Play::PlayList((
+                                self.list.clone().unwrap().playlist.tracks,
+                                PlayListOP::Set,
+                            ))));
                             self.ctx.borrow().ptx.send(PlayReq::Play(
                                 self.list.as_ref().unwrap().playlist.tracks[0].id,
                             ));
