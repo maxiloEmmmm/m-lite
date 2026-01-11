@@ -27,7 +27,7 @@ https://github.com/maxiloEmmmm/m-lite/releases/tag/nightly
 
 https://github.com/maxiloEmmmm/m-lite/tree/main/example/snap
 
-![demo](https://github.com/maxiloEmmmm/m-lite/example/snap/first.gif)
+![demo](https://github.com/maxiloEmmmm/m-lite/blob/main/example/snap/first.gif)
 
 ---
 
