@@ -142,6 +142,11 @@ pub fn global_help(mut base: Vec<(String, String)>) -> Vec<(String, String)> {
     base
 }
 
+
+pub fn is_global(key: &str) -> bool {
+    global_help(vec![]).iter().find(|v| v.0.eq(key)).is_none()
+}
+
 pub trait Modal {
     fn event(&mut self, e: &mut ES) -> bool;
     fn render_ref(&mut self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer);

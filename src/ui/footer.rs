@@ -32,6 +32,57 @@ pub struct Lyric {
     pub duration: u16,
 }
 
+pub fn add_music_to_play(ctx: ShareCtx, id: usize) {
+        let au = ctx.borrow().async_clone();
+        ctx.borrow_mut().add_modal(PlayListWidget::new(
+            "加入个人歌单列表",
+            {
+                move |item: &crate::m163::typ::PlayListItem| {
+                    au.rt.spawn({
+                        let aux = au.clone();
+                        let pid = item.id;
+                        async move {
+                            match aux.nc.track(true, pid, vec![id]).await {
+                                Ok(e) => {
+                                    aux.nc.clear_play_list(pid);
+
+                                    let resp = aux.nc.play_detail(pid).await;
+                                    match resp {
+                                        Ok(list) => {
+                                            aux.tx.send(ES::DataPlayListDetail(list));
+                                        }
+                                        Err(e) => {
+                                            println!("load detail {}", e);
+                                        }
+                                    }
+                                    aux.tx.send(ES::Tip(Msg(
+                                        "收藏成功!",
+                                        Duration::from_millis(1500),
+                                    )));
+                                }
+                                Err(e) => println!("e {}", e.to_string()),
+                            }
+                        }
+                    });
+                }
+            },
+        ));
+        ctx.borrow().rt.spawn({
+            let txx = ctx.borrow().tx.clone();
+            let ncx = ctx.borrow().nc.clone();
+            async move {
+                match ncx.play_list(0, 1000).await {
+                    Ok(d) => {
+                        txx.send(ES::DataPlayList(d));
+                    }
+                    Err(e) => {
+                        println!("e {}", e.to_string());
+                    }
+                }
+            }
+        });
+}
+
 pub struct Footer {
     state: PlayState,
     current: Option<PlayItem>,
@@ -111,9 +162,10 @@ impl Footer {
 
         let id = self.list[index].id;
         if self.bad.contains(&id) {
-            if !matches!(self.play_mode, PlayMode::SingleLoop) || self.list.len() == 1 {
+            if matches!(self.play_mode, PlayMode::SingleLoop) || self.list.len() == 1 {
                 return;
             }
+            self.list_state.select(Some(index));
             self.play_next(false);
             return;
         }
@@ -268,44 +320,7 @@ impl Footer {
                                 return;
                             }
                             let id = self.list[self.list_index].id;
-                            let au = self.ctx.borrow().async_clone();
-                            self.ctx.borrow_mut().add_modal(PlayListWidget::new(
-                                "加入个人歌单列表",
-                                {
-                                    move |item: &crate::m163::typ::PlayListItem| {
-                                        au.rt.spawn({
-                                            let aux = au.clone();
-                                            let pid = item.id;
-                                            async move {
-                                                match aux.nc.track(true, pid, vec![id]).await {
-                                                    Ok(e) => {
-                                                        aux.nc.clear_play_list(pid);
-                                                        aux.tx.send(ES::Tip(Msg(
-                                                            "收藏成功!",
-                                                            Duration::from_millis(1500),
-                                                        )));
-                                                    }
-                                                    Err(e) => println!("e {}", e.to_string()),
-                                                }
-                                            }
-                                        });
-                                    }
-                                },
-                            ));
-                            self.ctx.borrow().rt.spawn({
-                                let txx = self.ctx.borrow().tx.clone();
-                                let ncx = self.ctx.borrow().nc.clone();
-                                async move {
-                                    match ncx.play_list(0, 1000).await {
-                                        Ok(d) => {
-                                            txx.send(ES::DataPlayList(d));
-                                        }
-                                        Err(e) => {
-                                            println!("e {}", e.to_string());
-                                        }
-                                    }
-                                }
-                            });
+                            add_music_to_play(self.ctx.clone(), id);
                         }
                     }
                     KeyCode::Char('p') => {

@@ -102,10 +102,12 @@ impl Modal for PlayList {
                     }
                     KeyCode::Esc => {
                         self.close = true;
+                        return false;
                     }
                     KeyCode::Enter => {
                         (self.cb)(&self.list[self.list_state.selected().unwrap_or(0)]);
                         self.close = true;
+                        return false;
                     }
                     _ => {}
                 },
@@ -113,6 +115,7 @@ impl Modal for PlayList {
             },
             _ => {}
         }
+
         true
     }
 
