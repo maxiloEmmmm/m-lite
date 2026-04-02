@@ -21,7 +21,7 @@ use crate::{
     m163::typ::{PlayDetail, PlayDetailInner, PlayItem, PlayList},
     play::PlayReq,
     ui::{
-        app::{ShareCtx, global_help},
+        app::{ShareCtx, Wrap, global_help},
         focus::Focus,
         footer::add_music_to_play,
         widgets::{help::Help, play_list::PlayList as PlayListWidget, tip::Msg},
@@ -212,7 +212,7 @@ impl Content {
                                             )));
                                             ncx.clear_play();
                                         }
-                                        Err(e) => println!("e {}", e.to_string()),
+                                        Err(e) => txx.wrap_error("sub.play", &e),
                                     }
                                 }
                             });

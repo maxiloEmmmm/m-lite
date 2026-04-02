@@ -10,9 +10,10 @@ use crate::{
     ui::{
         app::{ShareCtx, Wrap, global_help},
         focus::Focus,
-        widgets::help::Help,
+        widgets::{help::Help, tip::Msg},
     },
 };
+use std::time::Duration;
 
 pub struct Head {
     name: String,
@@ -162,8 +163,36 @@ impl Head {
                                 self.ctx.borrow_mut().add_modal(Help::new(global_help(vec![
                                     ("j/k".to_owned(), "右/左移动".to_owned()),
                                     ("enter".to_owned(), "进入模块".to_owned()),
+                                    ("c".to_owned(), "清理推荐列表缓存".to_owned()),
                                     ("p".to_owned(), "打开播放列表".to_owned()),
                                 ])));
+                            }
+                            KeyCode::Char('c') => {
+                                if !matches!(self.list[self.pos].Key, HeadMenuKey::Maybe) {
+                                    return true;
+                                }
+
+                                let ctx = self.ctx.borrow().async_clone();
+                                let refresh_now = matches!(self.list[self.index].Key, HeadMenuKey::Maybe);
+                                self.ctx.borrow().rt.spawn(async move {
+                                    match ctx.nc.clear_recommend_resource_today() {
+                                        Ok(()) => {
+                                            let _ = ctx.tx.send(ES::Tip(Msg(
+                                                "已清理推荐列表缓存",
+                                                Duration::from_millis(1500),
+                                            )));
+                                            if refresh_now {
+                                                match ctx.nc.recommend_resource().await {
+                                                    Ok(vv) => {
+                                                        let _ = ctx.tx.send(ES::DataRecommendResource(vv));
+                                                    }
+                                                    Err(err) => ctx.tx.wrap_error("req recommed.resource", &err),
+                                                }
+                                            }
+                                        }
+                                        Err(err) => ctx.tx.wrap_error("clear.recommend.resource", &err),
+                                    }
+                                });
                             }
                             KeyCode::Char('j') => {
                                 self.pos += 1;

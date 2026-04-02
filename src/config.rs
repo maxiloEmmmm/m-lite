@@ -42,7 +42,7 @@ pub fn load() -> Config {
     let data_dir = dir.data_dir();
     let config_file = data_dir.join("config.yaml");
     std::fs::create_dir_all(data_dir).expect("touch.data_dir");
-    let ret = Config {
+    let mut ret = Config {
         home_dir: data_dir.to_string_lossy().into_owned(),
         ..Default::default()
     };
@@ -50,6 +50,7 @@ pub fn load() -> Config {
         Ok(data) => data,
         Err(e) => {
             if e.kind().eq(&std::io::ErrorKind::NotFound) {
+                ret.init();
                 return ret;
             } else {
                 panic!("load.config {}", e.to_string());

@@ -16,6 +16,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Clear, Paragraph, Widget, WidgetRef},
 };
+use serde_json::Value;
 use tokio::sync::mpsc::UnboundedSender;
 use tui_qrcode::QrCodeWidget;
 
@@ -72,10 +73,33 @@ pub trait Wrap {
     fn wrap_error(&self, what: &str, err: &impl ToString);
 }
 
+fn compact_error(err: &str) -> String {
+    let raw = err.trim();
+    let payload = raw
+        .strip_prefix("server respose ")
+        .unwrap_or(raw);
+
+    if let Ok(v) = serde_json::from_str::<Value>(payload) {
+        let code = v.get("code").and_then(|v| v.as_i64());
+        let msg = v
+            .get("msg")
+            .and_then(|v| v.as_str())
+            .or_else(|| v.get("message").and_then(|v| v.as_str()))
+            .unwrap_or("request failed");
+
+        return match code {
+            Some(code) => format!("{} {}", code, msg),
+            None => msg.to_owned(),
+        };
+    }
+
+    raw.to_owned()
+}
+
 impl Wrap for Sender<ES> {
     fn wrap_error(&self, what: &str, err: &impl ToString) {
         self.send(ES::Tip(Msg(
-            &format!("[error]{}: {}", what, err.to_string()),
+            &format!("[error]{}: {}", what, compact_error(err.to_string().as_str())),
             Duration::from_secs(3),
         )));
     }

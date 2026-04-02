@@ -12,7 +12,7 @@ use crate::{
     event::{ES, HeadMenuKey},
     m163::typ::{PlayList, PlayListItem},
     ui::{
-        app::{ShareCtx, global_help},
+        app::{ShareCtx, Wrap, global_help},
         focus::Focus,
         widgets::{help::Help, input::Input, tip::Msg},
     },
@@ -282,7 +282,7 @@ impl Slide {
                                                                         }
                                                                     }
                                                                     Err(e) => {
-                                                                        println!("e {}", e.to_string());
+                                                                        t2x.wrap_error("unsub.play", &e);
                                                                     }
                                                                 }
                                                             }

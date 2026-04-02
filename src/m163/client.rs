@@ -92,7 +92,7 @@ mod cache {
 pub struct Nc {
     client: reqwest::Client,
     down_client: reqwest::Client,
-    // csrf: String,
+    csrf: String,
     aes_1: Aes128CbcEnc,
     aes_2: Aes128CbcEnc,
     aes_key_rsa: String,
@@ -120,16 +120,15 @@ impl Nc {
         let mut client = reqwest::Client::builder();
         client = client.cookie_store(true);
         let jar = Arc::new(reqwest::cookie::Jar::default());
-        // let mut csrf = String::default();
+        let mut csrf = String::default();
         let uu =
             Url::parse(TARGET).map_err(|err| NCErr::Client("url".to_owned(), err.to_string()))?;
         cookie.split(";").for_each(|v| {
-            // if let Some((k, vv)) = v.trim().split_once("=") {
-            //     if k.eq("__csrf") {
-            //         println!("find csrf {}", vv);
-            //         csrf = vv.to_owned();
-            //     }
-            // }
+            if let Some((k, vv)) = v.trim().split_once("=") {
+                if k.eq("__csrf") {
+                    csrf = vv.to_owned();
+                }
+            }
 
             jar.add_cookie_str(v, &uu);
         });
@@ -185,6 +184,7 @@ impl Nc {
             aes_2: Aes128CbcEnc::new(&aes_key.into(), "0102030405060708".as_bytes().into()),
             aes_key_rsa: rnp,
             _profile: tokio::sync::RwLock::new(None),
+            csrf,
             config: c,
             event_tx,
         })
@@ -284,17 +284,17 @@ impl Nc {
         mut r: reqwest::RequestBuilder,
         mut data: serde_json::Value,
     ) -> Result<T, NCErr> {
-        // if !self.csrf.is_empty() {
-        //     match &mut data {
-        //         serde_json::Value::Object(inner) => {
-        //             inner.insert(
-        //                 "csrf_token".to_owned(),
-        //                 serde_json::Value::String(self.csrf.to_owned()),
-        //             );
-        //         }
-        //         _ => return Err(NCErr::Client("not object".to_owned(), "".to_owned())),
-        //     }
-        // }
+        if !self.csrf.is_empty() {
+            match &mut data {
+                serde_json::Value::Object(inner) => {
+                    inner.insert(
+                        "csrf_token".to_owned(),
+                        serde_json::Value::String(self.csrf.to_owned()),
+                    );
+                }
+                _ => return Err(NCErr::Client("not object".to_owned(), "".to_owned())),
+            }
+        }
         let mut m1 = serde_json::to_vec(&data).map_err(|_| NCErr::Any)?;
         let mut mll = m1.len();
         m1.resize(pkcs7_padded_len(m1.len(), aes::Aes128::block_size()), 0);
@@ -329,9 +329,9 @@ impl Nc {
             }),
             ("encSecKey", self.aes_key_rsa.as_str()),
         ]));
-        // if self.csrf.len() > 0 {
-        //     r = r.query(&[("csrf_token", self.csrf.as_str())]);
-        // }
+        if !self.csrf.is_empty() {
+            r = r.query(&[("csrf_token", self.csrf.as_str())]);
+        }
 
         let resp = r.send().await.map_err(|err| {
             if err.is_timeout() || err.is_connect() {
@@ -350,6 +350,13 @@ impl Nc {
 
         if !status.is_success() || text.len() == 0 {
             return Err(NCErr::Resp(text));
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(text.as_str()) {
+            if let Some(code) = v.get("code").and_then(|v| v.as_i64()) {
+                if code != 200 {
+                    return Err(NCErr::Resp(text));
+                }
+            }
         }
         serde_json::from_str(text.as_str()).map_err(|err| {
             NCErr::Client(
@@ -488,6 +495,23 @@ impl Nc {
     pub fn clear_play(&self) -> Result<(), NCErr> {
         self._clear_cache(cache::PLAY_LIST)
     }
+
+    pub fn clear_recommend_resource_today(&self) -> Result<(), NCErr> {
+        let now = Local::now();
+        let key = format!(
+            "recommend_resource_{}-{:02}-{:02}",
+            now.year(),
+            now.month(),
+            now.day()
+        );
+
+        match self._clear_cache(key.as_str()) {
+            Ok(()) => Ok(()),
+            Err(NCErr::Resp(err)) if err.contains("No such file or directory") => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+
     pub async fn search(&self, search: &str) -> Result<typ::SearchResult, NCErr> {
         self._build().await?;
         let req = self
