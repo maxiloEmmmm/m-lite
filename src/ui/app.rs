@@ -1,8 +1,15 @@
 use core::fmt;
 use std::{
-    borrow::Cow, cell::{RefCell, RefMut}, collections::{HashSet, LinkedList}, fmt::Display, rc::Rc, sync::{
-        mpsc::{self, Sender}, Arc
-    }, time::{Duration, Instant, SystemTime, UNIX_EPOCH}
+    borrow::Cow,
+    cell::{RefCell, RefMut},
+    collections::{HashSet, LinkedList},
+    fmt::Display,
+    rc::Rc,
+    sync::{
+        Arc,
+        mpsc::{self, Sender},
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use qrcode::QrCode;
@@ -75,9 +82,7 @@ pub trait Wrap {
 
 fn compact_error(err: &str) -> String {
     let raw = err.trim();
-    let payload = raw
-        .strip_prefix("server respose ")
-        .unwrap_or(raw);
+    let payload = raw.strip_prefix("server respose ").unwrap_or(raw);
 
     if let Ok(v) = serde_json::from_str::<Value>(payload) {
         let code = v.get("code").and_then(|v| v.as_i64());
@@ -99,7 +104,11 @@ fn compact_error(err: &str) -> String {
 impl Wrap for Sender<ES> {
     fn wrap_error(&self, what: &str, err: &impl ToString) {
         self.send(ES::Tip(Msg(
-            &format!("[error]{}: {}", what, compact_error(err.to_string().as_str())),
+            &format!(
+                "[error]{}: {}",
+                what,
+                compact_error(err.to_string().as_str())
+            ),
             Duration::from_secs(3),
         )));
     }
@@ -107,7 +116,11 @@ impl Wrap for Sender<ES> {
 
 impl Context {
     pub fn maybe_hidden(&self, v: &str) -> String {
-        if self.private { "*".repeat(v.len()) } else { v.to_owned() }
+        if self.private {
+            "*".repeat(v.len())
+        } else {
+            v.to_owned()
+        }
     }
 
     pub fn info(&mut self, msg: &str) {
@@ -165,7 +178,6 @@ pub fn global_help(mut base: Vec<(String, String)>) -> Vec<(String, String)> {
     base.append(&mut any_help());
     base
 }
-
 
 pub fn is_global(key: &str) -> bool {
     global_help(vec![]).iter().find(|v| v.0.eq(key)).is_none()

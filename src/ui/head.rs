@@ -153,7 +153,12 @@ impl Head {
             ES::DataProfile(profile) => {
                 self.ctx.borrow_mut().offline = false;
                 self.name = profile.profile.nickname.to_owned();
-                self.desc = profile.profile.signature.as_ref().map(|v| v.to_owned()).unwrap_or("".to_owned());
+                self.desc = profile
+                    .profile
+                    .signature
+                    .as_ref()
+                    .map(|v| v.to_owned())
+                    .unwrap_or("".to_owned());
             }
             ES::Event(ee) => {
                 if self.focus.is_me() {
@@ -173,7 +178,8 @@ impl Head {
                                 }
 
                                 let ctx = self.ctx.borrow().async_clone();
-                                let refresh_now = matches!(self.list[self.index].Key, HeadMenuKey::Maybe);
+                                let refresh_now =
+                                    matches!(self.list[self.index].Key, HeadMenuKey::Maybe);
                                 self.ctx.borrow().rt.spawn(async move {
                                     match ctx.nc.clear_recommend_resource_today() {
                                         Ok(()) => {
@@ -184,13 +190,19 @@ impl Head {
                                             if refresh_now {
                                                 match ctx.nc.recommend_resource().await {
                                                     Ok(vv) => {
-                                                        let _ = ctx.tx.send(ES::DataRecommendResource(vv));
+                                                        let _ = ctx
+                                                            .tx
+                                                            .send(ES::DataRecommendResource(vv));
                                                     }
-                                                    Err(err) => ctx.tx.wrap_error("req recommed.resource", &err),
+                                                    Err(err) => ctx
+                                                        .tx
+                                                        .wrap_error("req recommed.resource", &err),
                                                 }
                                             }
                                         }
-                                        Err(err) => ctx.tx.wrap_error("clear.recommend.resource", &err),
+                                        Err(err) => {
+                                            ctx.tx.wrap_error("clear.recommend.resource", &err)
+                                        }
                                     }
                                 });
                             }

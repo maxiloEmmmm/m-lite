@@ -190,7 +190,7 @@ impl Nc {
         })
     }
 
-    pub async fn qr_wait_login(&self, key: &str, chain: &str) -> Result<typ::QRLogin, NCErr> {
+    pub async fn qr_wait_login(&self, key: &str, _chain: &str) -> Result<typ::QRLogin, NCErr> {
         let req = self
             .client
             .post(format!("{}/weapi/login/qrcode/client/login", TARGET));
@@ -210,13 +210,14 @@ impl Nc {
         //     HeaderName::from_static("x-channelsource"),
         //     HeaderValue::from_static("undefined"),
         // );
-        self._req(
+        self._req_with_codes(
             req,
             json!({
                 "type": 1,
                 "key": key.to_owned(),
                 "noCheckToken": true
             }),
+            &[200, 800, 801, 802, 803],
         )
         .await
         .map_err(|err| NCErr::Client("req".to_owned(), err.to_string()))
@@ -281,8 +282,17 @@ impl Nc {
 
     async fn _req<T: serde::de::DeserializeOwned>(
         &self,
+        r: reqwest::RequestBuilder,
+        data: serde_json::Value,
+    ) -> Result<T, NCErr> {
+        self._req_with_codes(r, data, &[200]).await
+    }
+
+    async fn _req_with_codes<T: serde::de::DeserializeOwned>(
+        &self,
         mut r: reqwest::RequestBuilder,
         mut data: serde_json::Value,
+        ok_codes: &[i64],
     ) -> Result<T, NCErr> {
         if !self.csrf.is_empty() {
             match &mut data {
@@ -353,7 +363,7 @@ impl Nc {
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(text.as_str()) {
             if let Some(code) = v.get("code").and_then(|v| v.as_i64()) {
-                if code != 200 {
+                if !ok_codes.contains(&code) {
                     return Err(NCErr::Resp(text));
                 }
             }

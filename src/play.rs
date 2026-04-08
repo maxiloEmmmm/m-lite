@@ -62,7 +62,14 @@ pub fn play(mut ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, Unbounde
                                     ctx.event_tx.send(ES::LoginLink(link.unikey));
                                 },
                                 PlayReq::WatchLogin(key, chain) => {
-                                    let result = ctx.nc.qr_wait_login(key.as_str(), chain.as_str()).await.unwrap();
+                                    let result = match ctx.nc.qr_wait_login(key.as_str(), chain.as_str()).await {
+                                        Ok(result) => result,
+                                        Err(e) => {
+                                            ctx.event_tx.wrap_error("watch.login", &e);
+                                            ctx.event_tx.send(ES::LoginState(LoginState::Failed));
+                                            continue;
+                                        }
+                                    };
                                     match result.code {
                                         800 => {
                                             ctx.event_tx.send(ES::LoginState(LoginState::Failed));
@@ -75,7 +82,7 @@ pub fn play(mut ctx: PlayCtx, sink: Sink) -> (impl Future<Output = ()>, Unbounde
                                         },
                                         803 => {
                                             if let Err(e) = ctx.nc.save_cookie() {
-                                                panic!("save {}", e.to_string());
+                                                ctx.event_tx.wrap_error("save.cookie", &e);
                                             };
                                             ctx.event_tx.send(ES::AppState(AppState::Authed));
                                             ctx.event_tx.send(ES::LoginState(LoginState::Ok));

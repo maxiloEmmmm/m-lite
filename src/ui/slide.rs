@@ -66,7 +66,7 @@ impl Slide {
     fn load_list(&mut self) {
         if let Some(index) = self.list_state.selected() {
             if index >= self.list.as_ref().unwrap().list.len() {
-                return
+                return;
             }
             self.ctx.borrow().rt.spawn({
                 let nc = self.ctx.borrow().nc.clone();
@@ -357,7 +357,8 @@ impl Slide {
                             if !v.subscribed {
                                 style = style.fg(ratatui::style::Color::Blue);
                             }
-                            let line = Line::styled(self.ctx.borrow().maybe_hidden(vv.as_str()), style);
+                            let line =
+                                Line::styled(self.ctx.borrow().maybe_hidden(vv.as_str()), style);
 
                             ListItem::new(line)
                         })

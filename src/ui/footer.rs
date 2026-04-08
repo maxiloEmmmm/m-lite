@@ -33,54 +33,50 @@ pub struct Lyric {
 }
 
 pub fn add_music_to_play(ctx: ShareCtx, id: usize) {
-        let au = ctx.borrow().async_clone();
-        ctx.borrow_mut().add_modal(PlayListWidget::new(
-            "加入个人歌单列表",
-            {
-                move |item: &crate::m163::typ::PlayListItem| {
-                    au.rt.spawn({
-                        let aux = au.clone();
-                        let pid = item.id;
-                        async move {
-                            match aux.nc.track(true, pid, vec![id]).await {
-                                Ok(e) => {
-                                    aux.nc.clear_play_list(pid);
+    let au = ctx.borrow().async_clone();
+    ctx.borrow_mut()
+        .add_modal(PlayListWidget::new("加入个人歌单列表", {
+            move |item: &crate::m163::typ::PlayListItem| {
+                au.rt.spawn({
+                    let aux = au.clone();
+                    let pid = item.id;
+                    async move {
+                        match aux.nc.track(true, pid, vec![id]).await {
+                            Ok(e) => {
+                                aux.nc.clear_play_list(pid);
 
-                                    let resp = aux.nc.play_detail(pid).await;
-                                    match resp {
-                                        Ok(list) => {
-                                            aux.tx.send(ES::DataPlayListDetail(list));
-                                        }
-                                        Err(e) => {
-                                            println!("load detail {}", e);
-                                        }
+                                let resp = aux.nc.play_detail(pid).await;
+                                match resp {
+                                    Ok(list) => {
+                                        aux.tx.send(ES::DataPlayListDetail(list));
                                     }
-                                    aux.tx.send(ES::Tip(Msg(
-                                        "收藏成功!",
-                                        Duration::from_millis(1500),
-                                    )));
+                                    Err(e) => {
+                                        println!("load detail {}", e);
+                                    }
                                 }
-                                Err(e) => println!("e {}", e.to_string()),
+                                aux.tx
+                                    .send(ES::Tip(Msg("收藏成功!", Duration::from_millis(1500))));
                             }
+                            Err(e) => println!("e {}", e.to_string()),
                         }
-                    });
+                    }
+                });
+            }
+        }));
+    ctx.borrow().rt.spawn({
+        let txx = ctx.borrow().tx.clone();
+        let ncx = ctx.borrow().nc.clone();
+        async move {
+            match ncx.play_list(0, 1000).await {
+                Ok(d) => {
+                    txx.send(ES::DataPlayList(d));
                 }
-            },
-        ));
-        ctx.borrow().rt.spawn({
-            let txx = ctx.borrow().tx.clone();
-            let ncx = ctx.borrow().nc.clone();
-            async move {
-                match ncx.play_list(0, 1000).await {
-                    Ok(d) => {
-                        txx.send(ES::DataPlayList(d));
-                    }
-                    Err(e) => {
-                        println!("e {}", e.to_string());
-                    }
+                Err(e) => {
+                    println!("e {}", e.to_string());
                 }
             }
-        });
+        }
+    });
 }
 
 pub struct Footer {
