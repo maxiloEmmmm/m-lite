@@ -1,134 +1,248 @@
-name: Nightly Build
+name: Scheduled Release
 
 on:
-  schedule:
-    - cron: '0 16 * * *'  # UTC 16:00 → 北京时间 00:00
   workflow_dispatch:
+  schedule:
+    # GitHub Actions cron uses UTC.
+    # 19:00 UTC == 03:00 Asia/Shanghai on the next day.
+    - cron: "0 19 * * *"
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
-  check-changes:
+  precheck:
+    name: Compute release metadata
     runs-on: ubuntu-latest
     outputs:
-      should_build: ${{ steps.check.outputs.should_build }}
-      latest_commit: ${{ steps.latest.outputs.commit }}
+      should_skip: ${{ steps.meta.outputs.should_skip }}
+      next_version: ${{ steps.meta.outputs.next_version }}
+      release_notes: ${{ steps.meta.outputs.release_notes }}
     steps:
-      - name: Get default branch name
-        id: default
-        run: |
-          DEFAULT_BRANCH=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }} \
-            | jq -r '.default_branch')
-          echo "branch=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
+      - name: Compute version and release notes
+        id: meta
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const currentSha = context.sha.toLowerCase();
+            const { owner, repo } = context.repo;
 
-      - name: Get latest commit on default branch
-        id: latest
-        run: |
-          COMMIT=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ steps.default.outputs.branch }} \
-            | jq -r '.object.sha')
-          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100
+            });
 
-      - name: Get previous nightly commit (if exists)
-        id: previous
-        continue-on-error: true
-        run: |
-          RELEASE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/repos/${{ github.repository }}/releases/tags/nightly)
-          COMMIT=$(echo "$RELEASE" | jq -r '.target_commitish // "null"')
-          echo "commit=$COMMIT" >> $GITHUB_OUTPUT
+            const stableReleases = releases.filter((release) => !release.prerelease && !release.draft);
+            const latestStable = stableReleases[0] || null;
 
-      - name: Decide whether to build
-        id: check
-        run: |
-          if [[ "${{ steps.previous.outputs.commit }}" == "null" ]] || \
-             [[ "${{ steps.previous.outputs.commit }}" != "${{ steps.latest.outputs.commit }}" ]]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "Changes detected or no previous nightly → proceed"
-          else
-            echo "should_build=false" >> $GITHUB_OUTPUT
-            echo "No changes since last nightly → skip"
-          fi
+            if (latestStable) {
+              const body = latestStable.body || "";
+              const match = body.match(/Commit:\s*([0-9a-f]{40})/i);
+              if (match && match[1].toLowerCase() === currentSha) {
+                core.info("current commit already released");
+                core.setOutput("should_skip", "true");
+                core.setOutput("next_version", latestStable.tag_name || "");
+                core.setOutput("release_notes", "");
+                return;
+              }
+            }
+
+            function parseVersion(tag) {
+              const match = String(tag || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
+              if (!match) {
+                return null;
+              }
+              return {
+                major: Number(match[1]),
+                minor: Number(match[2]),
+                patch: Number(match[3])
+              };
+            }
+
+            let highest = { major: 0, minor: 0, patch: 0 };
+            let hasSemver = false;
+            for (const release of stableReleases) {
+              const parsed = parseVersion(release.tag_name);
+              if (!parsed) {
+                continue;
+              }
+              hasSemver = true;
+              const isHigher =
+                parsed.major > highest.major ||
+                (parsed.major === highest.major && parsed.minor > highest.minor) ||
+                (parsed.major === highest.major && parsed.minor === highest.minor && parsed.patch > highest.patch);
+              if (isHigher) {
+                highest = parsed;
+              }
+            }
+
+            let nextVersion = "0.0.1";
+            if (hasSemver) {
+              let { major, minor, patch } = highest;
+              patch += 1;
+              if (patch >= 100) {
+                patch = 0;
+                minor += 1;
+              }
+              if (minor >= 100) {
+                minor = 0;
+                major += 1;
+              }
+              nextVersion = `${major}.${minor}.${patch}`;
+            }
+
+            let releaseNotes = "- Initial release";
+            if (latestStable) {
+              try {
+                const compare = await github.rest.repos.compareCommits({
+                  owner,
+                  repo,
+                  base: latestStable.tag_name,
+                  head: context.sha
+                });
+                const commits = compare.data.commits || [];
+                if (commits.length > 0) {
+                  releaseNotes = commits
+                    .map((commit) => {
+                      const sha = commit.sha.slice(0, 7);
+                      const message = String(commit.commit.message || "").split("\n")[0].trim();
+                      return `- ${sha} ${message || "update"}`;
+                    })
+                    .join("\n");
+                } else {
+                  releaseNotes = "- No code changes found in compare range";
+                }
+              } catch (error) {
+                core.warning(`compare failed: ${error.message}`);
+                releaseNotes = "- Release notes unavailable";
+              }
+            }
+
+            core.setOutput("should_skip", "false");
+            core.setOutput("next_version", nextVersion);
+            core.setOutput("release_notes", releaseNotes);
 
   build:
-    needs: check-changes
-    continue-on-error: true
-    if: needs.check-changes.outputs.should_build == 'true'
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runs_on }}
+    needs: precheck
+    if: needs.precheck.outputs.should_skip != 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - target: linux-amd64
+            runs_on: ubuntu-latest
+            binary_name: music163-rs-lite
+            cargo_target: ""
+            output_dir: target/release
+          - target: macos-amd64
+            runs_on: macos-latest
+            binary_name: music163-rs-lite
+            cargo_target: x86_64-apple-darwin
+            output_dir: target/x86_64-apple-darwin/release
+          - target: windows-amd64
+            runs_on: windows-latest
+            binary_name: music163-rs-lite.exe
+            cargo_target: ""
+            output_dir: target/release
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Rust 1.91.1
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.91.1
 
+      - name: Add macOS target
+        if: runner.os == 'macOS'
+        run: rustup target add x86_64-apple-darwin
+
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build Linux x86_64 (native)
+      - name: Install Linux build dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt install libasound2-dev -y
-          cargo build --release
-          mkdir artifact
-          strip target/release/music163-rs-lite || true
-          chmod +x target/release/music163-rs-lite
-          cp target/release/music163-rs-lite artifact/music163-rs-lite-linux-amd64
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
-      - name: Build macOS x86_64 (cross-compile on arm64 runner)
-        if: runner.os == 'macOS'
+      - name: Build package
+        shell: bash
         run: |
-          rustup target add x86_64-apple-darwin
-          cargo build --release --target x86_64-apple-darwin
-          mkdir artifact
-          strip target/x86_64-apple-darwin/release/music163-rs-lite || true
-          chmod +x target/x86_64-apple-darwin/release/music163-rs-lite
-          cp target/x86_64-apple-darwin/release/music163-rs-lite artifact/music163-rs-lite-macos-amd64
+          set -euo pipefail
 
-      - name: Build Windows x86_64 (native)
-        if: runner.os == 'Windows'
-        run: |
-          cargo build --release
-          mkdir artifact
-          cp target/release/music163-rs-lite.exe artifact/
+          stage_dir="dist/${{ matrix.target }}"
+          mkdir -p "${stage_dir}"
 
-      - name: Upload artifact
+          cargo_args=(--release --locked)
+          if [ -n "${{ matrix.cargo_target }}" ]; then
+            cargo_args+=(--target "${{ matrix.cargo_target }}")
+          fi
+          cargo build "${cargo_args[@]}"
+
+          binary_path="${{ matrix.output_dir }}/${{ matrix.binary_name }}"
+          if [ ! -f "${binary_path}" ]; then
+            echo "binary not found: ${binary_path}" >&2
+            exit 1
+          fi
+
+          if [ "${RUNNER_OS}" != "Windows" ]; then
+            strip "${binary_path}" || true
+            chmod +x "${binary_path}"
+          fi
+
+          cp "${binary_path}" "${stage_dir}/${{ matrix.binary_name }}"
+          cp README.md "${stage_dir}/README.md"
+
+          tar -C dist -czf "dist/${{ matrix.target }}-all.tgz" "${{ matrix.target }}"
+
+      - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: music163-rs-lite-x86_64-${{ runner.os }}
-          path: artifact/
-          if-no-files-found: warn
+          name: ${{ matrix.target }}-all
+          path: dist/${{ matrix.target }}-all.tgz
+          if-no-files-found: error
 
-  publish-release:
-    needs: [check-changes, build]
-    if: needs.check-changes.outputs.should_build == 'true'
+  release:
+    name: Publish release
     runs-on: ubuntu-latest
+    needs:
+      - precheck
+      - build
+    if: needs.precheck.outputs.should_skip != 'true'
+
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: release-assets
 
-      - name: List downloaded artifacts
-        run: ls -R artifacts
+      - name: Verify packaged assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -type f -name '*-all.tgz' | sort
+          count="$(find release-assets -type f -name '*-all.tgz' | wc -l | tr -d ' ')"
+          if [ "${count}" -eq 0 ]; then
+            echo "no packaged assets found" >&2
+            exit 1
+          fi
 
-      - name: Create/Update nightly release
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly
-          name: Nightly Build - ${{ github.sha }}
+          tag_name: ${{ needs.precheck.outputs.next_version }}
+          name: ${{ needs.precheck.outputs.next_version }}
           body: |
-            Automated nightly build from commit ${{ github.sha }}.
-          prerelease: true
-          fail_on_unmatched_files: false
+            Automated scheduled release.
+
+            Commit: ${{ github.sha }}
+
+            Changes since previous release:
+            ${{ needs.precheck.outputs.release_notes }}
+          prerelease: false
+          make_latest: true
           files: |
-            artifacts/**/*
-          token: ${{ secrets.GITHUB_TOKEN }}
+            release-assets/**/*-all.tgz
